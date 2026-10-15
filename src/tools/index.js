@@ -4,7 +4,8 @@ const restore = require("../restore");
 const search = require("../search");
 
 /**
- * The model's context tools, harness-neutral: a name, a description, parameters as a flat map of
+ * The model's context tools, harness-neutral: a name, a description, a one-line `snippet` and `guidelines` for a
+ * system prompt (when the harness has one), parameters as a flat map of
  * `{ type: "string"|"number", description, required }`, and `run(args, view)` returning `{ text, edits? }` or
  * `{ error }`. `view` is `{ items, all, perChar }`. An adapter registers them with its harness.
  */
@@ -14,6 +15,13 @@ const specs = (cfg) => {
 		{
 			name: t.rewind,
 			label: "Collapse",
+			snippet: "Collapse finished work into your summary to keep your context small (the detail stays findable)",
+			guidelines: [
+				"Keep your context small from the start: as soon as a part of the work is done (files read and understood, a search or investigation finished, a step completed), collapse it with " +
+					t.rewind + " into a summary of what the rest of the work needs. Don't wait for the context to fill up.",
+				"A collapse summary keeps exact values verbatim (paths, line numbers, ids, figures, decisions) and ends with a \"Keywords: …\" line; the originals stay findable with " +
+					t.search + " and readable with " + t.restore + "."
+			],
 			description: "Shrink your context by replacing a finished stretch of your history with your summary. " +
 				"Give from and to: everything from the turn of from through the results of to becomes your summary, while everything after it stays word for word. " +
 				"E.g. you read many files: from = the first result, to = the last one, summary = what you learned from them. " +
@@ -32,6 +40,10 @@ const specs = (cfg) => {
 		{
 			name: t.offload,
 			label: "Offload",
+			snippet: "Replace a big tool result you have used with a one-line pointer",
+			guidelines: [
+				"Offload a big tool result with " + t.offload + " once you have used it and won't need it verbatim."
+			],
 			description: "Replace one big item of your history (a tool result you have already used, a long message) with a one-line pointer. " +
 				"Name it by its entry id (each tool result starts with [entry <id>]) or by the id of the tool call whose result it is. " +
 				"The original stays stored: " + t.restore + " reads it back. Takes effect from your next turn.",
@@ -44,6 +56,7 @@ const specs = (cfg) => {
 		{
 			name: t.restore,
 			label: "Restore",
+			snippet: "Read back a piece of any original, or put an offloaded result back",
 			description: "Two things, and only these. With offset and length: reads a piece of the original text of one entry of this session by its id, changing nothing: " +
 				"an offloaded result, a big result in parts, or one entry of a collapsed or compacted stretch (their indexes and " + t.search + " give the ids). " +
 				"Without offset and length: puts an offloaded entry back in place of its pointer (it costs context). " +
@@ -58,6 +71,7 @@ const specs = (cfg) => {
 		{
 			name: t.search,
 			label: "Search",
+			snippet: "Search everything in this session, including collapsed, offloaded and compacted parts",
 			description: "Full-text search over everything in this session, including what was offloaded, collapsed or compacted: messages, tool call arguments and tool results. " +
 				"Every word must appear, in any order, newest first; when no entry has them all, the entries with the most of them come back, ranked. " +
 				"Words match as written, not by meaning: when the words of a question may not be the material's, search a few short queries, one idea each, " +

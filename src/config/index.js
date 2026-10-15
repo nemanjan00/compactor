@@ -13,6 +13,19 @@ const DEFAULTS = {
 	compactAt: null,
 	// Finished earlier requests that take this share of the window get a note at a new request (0 = off).
 	boundaryAt: 30,
+	// When the model goes on without collapsing the finished requests a boundary note named, collapse them after its
+	// next turn: each request and its final reply kept, the work in between replaced by an index (no summary).
+	autoCollapse: false,
+	// … or this many tokens, if fewer (0 = only the share), so a big window doesn't put it off.
+	boundaryTokens: 40000,
+	// A finished stretch of tool calls this big (tokens) gets a short note suggesting to collapse it, whatever the
+	// window (0 = off).
+	nudgeTokens: 25000,
+	// Tool calls that mark a finished task (e.g. a todo marked completed): `{ tool, args }`, every given argument equal.
+	// When one is made, the work since the previous one gets a note suggesting to collapse it.
+	milestones: [],
+	// The least work (tokens) a milestone note names.
+	milestoneMinTokens: 4000,
 	// Points the context must fall below a noted threshold before that threshold can be noted again.
 	rearmMargin: 15,
 	// A tool result longer than this (characters) is replaced at once by its head and tail (0 = off).
@@ -28,10 +41,6 @@ const DEFAULTS = {
 	searchLimit: 10,
 	// Characters around a search hit shown in its snippet.
 	snippetChars: 160,
-	// The largest summary a compaction asks for (tokens).
-	summaryMaxTokens: 8000,
-	// A tool result is cut to this many characters when a conversation is written out for a summary.
-	serializeResultChars: 2000,
 	// Characters per token before a measured context size is known.
 	charsPerToken: 3.5,
 	suggestionsMax: 3,

@@ -12,6 +12,5 @@ module.exports = {
 	offload: require("./offload"),
 	restore: require("./restore"),
 	search: require("./search"),
-	compaction: require("./compaction"),
 	tools: require("./tools")
 };

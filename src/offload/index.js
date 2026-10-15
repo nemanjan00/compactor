@@ -37,7 +37,7 @@ const oversized = (results, cfg) => {
  * @param {{entry: string, text: string}} args
  */
 const offload = (items, args, perChar, cfg) => {
-	const what = String(args.text || "").trim();
+	const what = String(args.text || "").trim().replace(/[.\s]+$/, "");
 	if (!what) {
 		return { error: "text is required: one line saying what the pointer stands for" };
 	}

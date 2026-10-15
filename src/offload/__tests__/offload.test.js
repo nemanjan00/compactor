@@ -44,7 +44,7 @@ describe("offload, restore and search", () => {
 
 	test("the model offloads a result by its call id, and restore puts it back", () => {
 		const items = [f.user("go")].concat(f.reads(["a.js"], 3000), [f.reply("ok")]);
-		const r = offload.offload(items, { entry: items[1].calls[0].id, text: "a.js, the parser" }, perChar, cfg);
+		const r = offload.offload(items, { entry: items[1].calls[0].id, text: "a.js, the parser." }, perChar, cfg);
 		expect(r.edits[0].target).toBe(items[2].id);
 		const view = history.applyEdits(items, r.edits, items);
 		expect(view[2].text).toMatch(/^\[offloaded: a.js, the parser\. The original \(≈\d/);

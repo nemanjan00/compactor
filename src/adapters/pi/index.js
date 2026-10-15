@@ -25,10 +25,13 @@ const schema = (params) => {
 
 /**
  * Pi's defaults on top of the core's: a `read` is a file the model asked for, and pi's read tool already caps its
- * output and takes an offset and a limit, so its results are never offloaded as they arrive.
+ * output and takes an offset and a limit, so its results are never offloaded as they arrive; a todo marked
+ * completed is the moment to collapse that task's work.
  */
 const PI_DEFAULTS = {
-	keepWhole: ["read"]
+	keepWhole: ["read"],
+	// A todo marked completed (the todo tool of @juicesharp/rpiv-todo, and tools shaped like it) ends a task.
+	milestones: [{ tool: "todo", args: { status: "completed" } }]
 };
 
 /** Overrides of the defaults from the `COMPACTOR_OPTIONS` environment variable (JSON), e.g. `{"noteAt": 60}`. */
@@ -52,6 +55,8 @@ const extension = (pi, options) => {
 			name: spec.name,
 			label: spec.label,
 			description: spec.description,
+			promptSnippet: spec.snippet,
+			promptGuidelines: spec.guidelines,
 			parameters: schema(spec.params),
 			executionMode: "sequential",
 			execute: (_toolCallId, params, _signal, _onUpdate, ctx) => {

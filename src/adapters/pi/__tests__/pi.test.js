@@ -67,6 +67,8 @@ describe("pi adapter", () => {
 			expect(typeof pi.handlers[h]).toBe("function");
 		});
 		expect(pi.handlers.session_before_compact).toBeUndefined();
+		expect(pi.tools[0].promptGuidelines[0]).toMatch(/^Keep your context small from the start/);
+		expect(pi.tools.every((t) => t.promptSnippet)).toBe(true);
 	});
 
 	test("labels tool results with their entry ids, once", () => {
@@ -139,11 +141,5 @@ describe("pi adapter", () => {
 		return search.execute("c", { text: "invoice" }, undefined, undefined, ctx).then((r) => {
 			expect(r.content[0].text).toContain("entry o1 (user, on another branch)");
 		});
-	});
-
-	test("compactedItems are the branch's entries since the previous compaction's kept boundary", () => {
-		const list = entries();
-		const withCompaction = list.slice(0, 2).concat([{ type: "compaction", id: "c1", firstKeptEntryId: "a1", summary: "s" }], list.slice(2));
-		expect(session.compactedItems(withCompaction, "a2").map((i) => i.id)).toEqual(["a1", "r1", "r2"]);
 	});
 });

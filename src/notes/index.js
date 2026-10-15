@@ -76,11 +76,29 @@ const boundaryText = (tokens, window, tasks, cfg) => {
 	return "[context: about " + text.kTokens(tokens) + " of " + text.kTokens(window) + " tokens, " + text.kTokens(total) + " of it earlier requests that are done] " +
 		"A new request is a good point to keep only what it needs. Unless you need their detail now, collapse them, each into a " +
 		"summary of what the current work still needs from it (decisions, results, exact ids); the detail stays findable with " + cfg.tools.search + ". " +
-		"Left as they are, they are collapsed after your next turn, keeping each request and the final reply to it word for word:\n" +
+		(cfg.autoCollapse ? "Left as they are, they are collapsed after your next turn, keeping each request and the final reply to it word for word:\n" : "") +
 		tasks.map((x) => suggestions.line(x, cfg)).join("\n");
 };
 
+/** The nudge to collapse finished work early, before the context is anywhere near full. */
+const nudgeText = (picks, cfg) => {
+	return "[context: finished work you could collapse now]\n" + picks.map((x) => suggestions.line(x, cfg)).join("\n") + "\n" +
+		"If you are done with it, collapse it now rather than when the context is full: put what the rest of the work needs in the summary " +
+		"(exact paths, line numbers, ids, decisions). A smaller context is cheaper and keeps you focused; the detail stays findable with " +
+		cfg.tools.search + " and " + cfg.tools.restore + ". If you still need it verbatim, go on and ignore this.";
+};
+
+/** The note when a task is marked done: collapse its work now. */
+const milestoneText = (x, cfg) => {
+	return "[context: a task is done] Its work, " + x.from + " … " + x.to + ", is about " + text.kTokens(x.tokens) + " tokens: " +
+		cfg.tools.rewind + " { from: \"" + x.from + "\", to: \"" + x.to + "\", summary }. Collapse it now, keeping in the summary what the " +
+		"remaining tasks need from it (exact paths, line numbers, ids, decisions), unless the next task needs it verbatim. " +
+		"A small context is cheaper and keeps you focused; the detail stays findable with " + cfg.tools.search + ".";
+};
+
 module.exports = {
+	milestoneText,
+	nudgeText,
 	notedIn,
 	decide,
 	noteText,

@@ -164,27 +164,6 @@ const noteMessage = (note) => {
 	};
 };
 
-/** Pi messages (a compaction's preparation) as items without ids, for a summary prompt. */
-const messageItems = (messages) => {
-	return (messages || []).map((m, k) => messageItem("m" + k, m)).filter(Boolean);
-};
-
-/**
- * The originals a compaction replaces, for its index: the branch's message entries from the previous compaction's
- * kept boundary (or the start) up to `firstKeptEntryId`.
- */
-const compactedItems = (branch, firstKeptEntryId) => {
-	const at = branch.findIndex((e) => e.id === firstKeptEntryId);
-	const end = at < 0 ? branch.length : at;
-	const previous = branch.slice(0, end).filter((e) => e.type === "compaction").pop();
-	let start = 0;
-	if (previous) {
-		const kept = branch.findIndex((e) => e.id === previous.firstKeptEntryId);
-		start = kept >= 0 ? kept : branch.indexOf(previous) + 1;
-	}
-	return branch.slice(start, end).map(entryItem).filter((i) => i && i.role !== "summary");
-};
-
 /** A tool result's text with its entry id in front, so the model can name it: `[entry 1a2b3c4d] …`. */
 const labelResults = (messages, ids) => {
 	return messages.map((m) => {
@@ -223,8 +202,6 @@ module.exports = {
 	view,
 	editDraft,
 	noteMessage,
-	messageItems,
-	compactedItems,
 	labelResults,
 	resultIds
 };

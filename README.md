@@ -9,12 +9,17 @@ A long agent session fills its context window with work that is already done: fi
 log that was searched once, a whole earlier request. The usual fix is compaction: summarise everything at once
 when the window is nearly full, and lose whatever the summary didn't copy.
 
-compactor frees space in smaller steps, and the model takes part:
+compactor keeps the context small from the start, and the model does the work. compactor never writes a summary:
+it tells the model when there is finished work to free and gives it the tools, and the model writes every summary
+itself.
 
 - **Collapse** a finished stretch of work into the model's own summary, with an index of every result it replaced.
 - **Offload** a big tool result to a one-line pointer, and put it back when it's needed again.
-- **Notes** tell the model how full its context is and name the biggest finished parts, with the ids to free them.
-- **At a new request**, earlier finished requests are collapsed down to each request and its final reply.
+- **Nudges** tell the model to collapse early:
+  - a system-prompt guideline from the first turn;
+  - a note when a task is marked done (a completed todo) or a finished stretch grows big;
+  - a note when a new request starts with finished earlier requests still in context.
+- **Notes** at 70% and 80% of the window name the biggest finished parts, with the ids to free them.
 - **Search and restore** reach every original: offloaded, collapsed, compacted, or on another branch of the session.
 
 Nothing is deleted. Each change only alters what the model sees; the session keeps every original, so any
@@ -56,12 +61,29 @@ search and restore also reach what pi compacted.
 
 ## What the model sees
 
+The system prompt carries a guideline from the first turn:
+
+```
+- Keep your context small from the start: as soon as a part of the work is done (files read and understood, a search
+  or investigation finished, a step completed), collapse it with context_rewind into a summary of what the rest of the
+  work needs. Don't wait for the context to fill up.
+```
+
 Every tool result starts with its entry id, so the model can name it:
 
 ```
 [entry 6533b688] row 0 of file 2: inventory count 2 units
 …
 ```
+
+When a task is marked done (in pi, a todo set to `completed`), a note names that task's work:
+
+```
+[context: a task is done] Its work, 58451f06 … 4005cfa9, is about 17k tokens: context_rewind { from: "58451f06", to: "4005cfa9", summary }. Collapse it now, keeping in the summary what the remaining tasks need from it (exact paths, line numbers, ids, decisions), unless the next task needs it verbatim.
+```
+
+A finished stretch of 25k tokens or more gets a similar nudge, whatever the window, and so does a new request that
+starts with 40k tokens (or 30% of the window, if less) of finished earlier requests.
 
 When the context passes 70% of the window, a short note names what is finished and how to free it:
 
@@ -91,23 +113,25 @@ A tool result over 20,000 characters is replaced at once by its head and tail, w
 `read` results are left whole: pi's read tool already caps its output and takes an offset and a limit, and a file
 the model asked for is one it needs. The compactor's own results are never offloaded.
 
-When a new request starts and finished earlier requests take more than 30% of the window, a note suggests
-collapsing them. If the model goes on without doing so, they are collapsed after its next turn: each request and
-the final reply to it stay word for word, and the work in between becomes an index.
+Everything else is up to the model. With `autoCollapse: true`, finished requests the model was told about and left
+in context are collapsed after its next turn: each request and its final reply stay word for word, and the work in
+between becomes an index (still no summary). It's off by default.
 
 ```mermaid
 flowchart LR
   A[tool results arrive] -->|over 20k chars| B[head and tail + pointer]
   A --> C{context size}
+  S[system prompt: collapse early] --> F
+  T[todo completed] --> N[note: collapse this task's work]
+  A -->|finished stretch ≥ 25k| N
+  G[new request] -->|earlier work ≥ 40k| N
   C -->|70%| D[note: biggest finished parts, with ids]
   C -->|80%| E[instruction: free space now]
-  D --> F[model: context_rewind / context_offload]
+  N --> F[model: context_rewind / context_offload, with its own summary]
+  D --> F
   E --> F
-  G[new request] -->|earlier work ≥ 30%| H[boundary note]
-  H -->|left as is after one turn| I[collapse to requests + replies + index]
   F --> J[(originals kept)]
   B --> J
-  I --> J
   J --> K[context_search / context_restore]
 ```
 
@@ -139,6 +163,11 @@ COMPACTOR_OPTIONS='{"noteAt": 60, "boundaryAt": 25}' pi
 | `contextWindow` | `null` | Manage against this window (tokens) when it is smaller than the model's |
 | `compactAt` | `null` | Where the host compacts on its own, mentioned in the notes; thresholds at or above it are skipped |
 | `boundaryAt` | `30` | Share of the window that finished earlier requests must take for a note at a new request (`0` = off) |
+| `boundaryTokens` | `40000` | … or this many tokens, if fewer, so a big window doesn't put the note off (`0` = only the share) |
+| `nudgeTokens` | `25000` | A finished stretch this big gets a note suggesting to collapse it, whatever the window (`0` = off) |
+| `milestones` | `[]` (pi: a completed `todo`) | Tool calls that mark a task done, `{ tool, args }`: the task's work gets a note suggesting to collapse it |
+| `milestoneMinTokens` | `4000` | The least work a milestone note names |
+| `autoCollapse` | `false` | Collapse finished requests the model left after a new-request note (requests and replies kept, the rest indexed) |
 | `rearmMargin` | `15` | Points the context must fall below a noted threshold before it is noted again |
 | `resultMaxChars` | `20000` | Tool results longer than this are offloaded as they arrive (`0` = off) |
 | `pointerHead`, `pointerTail` | `2000`, `1000` | Characters of an oversized result kept from its start and end |
@@ -153,7 +182,7 @@ COMPACTOR_OPTIONS='{"noteAt": 60, "boundaryAt": 25}' pi
 ## How it fits a harness
 
 The core works on a plain list of history items and returns plain edits, so it knows nothing about any harness.
-An adapter does three things: builds the items from its session, calls the compactor at four points, and applies
+An adapter does three things: builds the items from its session, calls the compactor at three points, and applies
 what comes back.
 
 ```js
@@ -162,11 +191,11 @@ const createCompactor = require("@nemanjan00/compactor").createCompactor;
 const compactor = createCompactor({ noteAt: 70 });
 
 // view = { items, all, usage: { tokens, window, baseChars } }
-compactor.tools;                                   // tool specs: name, description, params, to register
+compactor.tools;                                   // tool specs to register: name, description, params, and a
+                                                   // snippet and guidelines for the system prompt
 compactor.callTool(name, args, view);              // → { text, isError }; changes wait for the end of the turn
 compactor.endTurn(view, newResultIds);             // → { edits, notes } to apply before the next model call
 compactor.startRequest(view);                      // → a note for a new request, or undefined
-compactor.compact(job, complete);                  // → Promise<{ summary, usage }>, for hosts without their own compaction
 ```
 
 **Items** are oldest first. `items` is what the model sees now; `all` holds every original, for search and restore.
@@ -233,7 +262,7 @@ each) to find a held crate. Then come three questions about earlier batches:
 Both arms manage an effective 64k-token window (pi compacts there). The `classic` arm is pi alone; the `compactor`
 arm is pi with this extension. Billed-equivalent tokens count uncached input at 1, cache reads at 0.1 and output at 5.
 
-Results from 2026-10-15 with kimi-for-coding, three runs per arm (median, range in brackets):
+Results from 2026-10-15 with kimi-for-coding and compactor 0.1.1 (before the nudges), three runs per arm (median, range in brackets):
 
 | arm | billed-equivalent | tasks | follow-ups | right | compactions | peak context | cached |
 |-----|-------------------|-------|------------|-------|-------------|--------------|--------|

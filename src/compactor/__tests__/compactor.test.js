@@ -50,8 +50,8 @@ describe("createCompactor", () => {
 		expect(c.endTurn(viewOf(noted, noted, at(82)), []).notes[0].kind).toBe("near");
 	});
 
-	test("a new request after big finished ones gets a note, and they are collapsed after the next turn if left", () => {
-		const c = createCompactor();
+	test("a new request after big finished ones gets a note, and with autoCollapse they are collapsed after the next turn if left", () => {
+		const c = createCompactor({ autoCollapse: true });
 		const t1 = [f.user("summarise the logs")].concat(f.reads(["log1", "log2"], 8000), [f.reply("two errors: E1 and E2")]);
 		const before = viewOf(t1, t1, 10000);
 		const note = c.startRequest(before);
@@ -72,29 +72,61 @@ describe("createCompactor", () => {
 		expect(c.startRequest(viewOf(t1, t1, 1000000)).text).toContain("of 10k tokens");
 	});
 
+	test("a finished stretch over nudgeTokens gets a nudge once, whatever the window", () => {
+		const c = createCompactor({ nudgeTokens: 2000 });
+		const done = f.reads(["a.js", "b.js"], 6000);
+		const items = [f.user("go")].concat(done, f.reads(["c.js"], 200));
+		const out = c.endTurn(viewOf(items, items, 1000000), []);
+		expect(out.notes).toHaveLength(1);
+		expect(out.notes[0].kind).toBe("nudge");
+		expect(out.notes[0].tasks).toEqual([done[1].id]);
+		expect(out.notes[0].text).toContain("context_rewind { from: \"" + done[1].id + "\"");
+		const nudged = items.concat([{ id: "n1", role: "note", text: out.notes[0].text, note: { kind: "nudge", level: 0, tasks: out.notes[0].tasks } }]);
+		expect(c.endTurn(viewOf(nudged, nudged, 1000000), []).notes).toEqual([]);
+		expect(createCompactor({ nudgeTokens: 0 }).endTurn(viewOf(items, items, 1000000), []).notes).toEqual([]);
+	});
+
+	test("a todo marked completed names the work since the previous one, once", () => {
+		const todo = (status) => {
+			const turn = { id: "t" + status + Math.random(), role: "assistant", text: "", calls: [{ id: "call_" + status + Math.random(), name: "todo", args: JSON.stringify({ action: "update", id: 1, status }) }] };
+			return [turn, { id: turn.id + "r", role: "toolResult", callId: turn.calls[0].id, toolName: "todo", text: "ok" }];
+		};
+		const c = createCompactor({ milestones: [{ tool: "todo", args: { status: "completed" } }], milestoneMinTokens: 100, nudgeTokens: 0 });
+		const first = f.reads(["a.js", "b.js"], 3000);
+		const items = [f.user("build it")].concat(todo("in_progress"), first, todo("completed"));
+		const out = c.endTurn(viewOf(items, items, 1000000), []);
+		expect(out.notes[0].kind).toBe("milestone");
+		expect(out.notes[0].text).toContain("context_rewind { from: \"" + items[2].id + "\", to: \"" + items[items.length - 1].id + "\"");
+		const noted = items.concat([{ id: "n1", role: "note", text: "", note: { kind: "milestone", tasks: out.notes[0].tasks } }]);
+		expect(c.endTurn(viewOf(noted, noted, 1000000), []).notes).toEqual([]);
+		// The next task's work starts after the previous milestone.
+		const second = f.reads(["c.js"], 3000);
+		const later = noted.concat(todo("in_progress"), second, todo("completed"));
+		const next = c.endTurn(viewOf(later, later, 1000000), []);
+		expect(next.notes[0].tasks).toEqual([later[noted.length + 1].id]);
+		// An in-progress update is no milestone.
+		const busy = items.slice(0, items.length - 2).concat(todo("in_progress"));
+		expect(c.endTurn(viewOf(busy, busy, 1000000), []).notes).toEqual([]);
+	});
+
+	test("the boundary note fires at boundaryTokens in a big window", () => {
+		const t1 = [f.user("summarise the logs")].concat(f.reads(["log1", "log2"], 8000), [f.reply("two errors")]);
+		expect(createCompactor({ boundaryTokens: 0 }).startRequest(viewOf(t1, t1, 1000000))).toBeUndefined();
+		expect(createCompactor({ boundaryTokens: 3000 }).startRequest(viewOf(t1, t1, 1000000)).kind).toBe("boundary");
+	});
+
+	test("by default the boundary note only suggests: nothing is collapsed for the model", () => {
+		const c = createCompactor();
+		const t1 = [f.user("summarise the logs")].concat(f.reads(["log1", "log2"], 8000), [f.reply("two errors: E1 and E2")]);
+		const note = c.startRequest(viewOf(t1, t1, 10000));
+		expect(note.text).not.toContain("Left as they are");
+		const now = t1.concat([f.user("now fix E1"), { id: "n1", role: "note", text: note.text, note: { kind: "boundary" } }], f.reads(["src.js"], 500));
+		expect(c.endTurn(viewOf(now, now, 10000), []).edits).toEqual([]);
+	});
+
 	test("no boundary note for small earlier requests", () => {
 		const c = createCompactor();
 		const t1 = [f.user("lunch anyone?"), f.reply("sure")];
 		expect(c.startRequest(viewOf(t1, t1, 100000))).toBeUndefined();
-	});
-
-	test("compact asks the model with the prompt and indexes what it replaced", () => {
-		const c = createCompactor();
-		const items = [f.user("review the parser")].concat(f.reads(["a.js"], 3000));
-		let prompt = "";
-		return c.compact({ items, previousSummary: "earlier: set up the repo" }, (p, o) => {
-			prompt = p;
-			expect(o.maxTokens).toBe(8000);
-			return Promise.resolve({ text: "parser reviewed\nKeywords: parser", usage: { input: 1 } });
-		}).then((r) => {
-			expect(prompt).toContain("<previous-summary>\nearlier: set up the repo");
-			expect(prompt).toContain("[User]: review the parser");
-			expect(prompt).toContain("[Assistant tool calls]: read({\"path\":\"a.js\"})");
-			expect(r.summary).toMatch(/^parser reviewed\nKeywords: parser\n\n\[index of what this replaced/);
-			expect(r.summary).toContain("→ entry " + items[2].id);
-			return c.compact({ items }, () => Promise.resolve({ text: "  " }));
-		}).then((r) => {
-			expect(r).toBeUndefined();
-		});
 	});
 });

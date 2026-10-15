@@ -4,19 +4,17 @@ const suggestions = require("../suggestions");
 const notes = require("../notes");
 const collapse = require("../collapse");
 const offload = require("../offload");
-const compaction = require("../compaction");
 const tools = require("../tools");
 
 /**
- * The compactor for one session. A harness adapter calls it at four points and applies what it returns:
+ * The compactor for one session. It never writes a summary itself: it tells the model what to free and gives it the
+ * tools; the model writes every summary. A harness adapter calls it at three points and applies what it returns:
  *
  *   callTool(name, args, view)          the model called one of `tools`: returns `{ text, isError }`; any change it
  *                                       makes is held until the end of the turn
  *   endTurn(view, newResultIds)         a turn ended (its tool results are in): returns `{ edits, notes }` to apply
  *                                       before the next model call
  *   startRequest(view)                  a new request is about to start: returns a note, or undefined
- *   compact(job, complete)              the host compacts: returns a Promise of `{ summary, usage }`, or undefined to
- *                                       let the host summarise
  *
  * `view` is `{ items, all, usage: { tokens, window } }` (see `history`). Edits are `{ target, drop | text | calls |
  * restore }`; a note is `{ kind, level, tasks, text }`.
@@ -40,6 +38,80 @@ const createCompactor = (options) => {
 	/** The view with the changes held for the end of the turn applied, so a later call this turn sees them. */
 	const withPending = (view) => {
 		return Object.assign({}, view, { items: history.applyEdits(view.items, state.pending, view.all), perChar: perCharOf(view) });
+	};
+
+	/**
+	 * A short note naming finished stretches of at least `cfg.nudgeTokens`, whatever the window: so the model collapses
+	 * finished work early. Each stretch is named once (by where it starts).
+	 */
+	const nudgeFor = (items, perChar) => {
+		if (!cfg.nudgeTokens) {
+			return undefined;
+		}
+		const nudged = new Set(items
+			.filter((i) => i.role === "note" && i.note && i.note.kind === "nudge")
+			.reduce((ids, i) => ids.concat(i.note.tasks || []), []));
+		const picks = suggestions.suggestions(items, perChar, Object.assign({}, cfg, { suggestionMinTokens: cfg.nudgeTokens }))
+			.filter((x) => x.kind === "collapse" && !nudged.has(x.from));
+		if (!picks.length) {
+			return undefined;
+		}
+		return { kind: "nudge", level: 0, tasks: picks.map((x) => x.from), text: notes.nudgeText(picks, cfg) };
+	};
+
+	/** Whether a tool call marks a finished task (`cfg.milestones`). */
+	const isMilestone = (call) => {
+		let args = {};
+		try {
+			args = JSON.parse(call.args || "{}");
+		} catch {
+			return false;
+		}
+		return (cfg.milestones || []).some((m) => {
+			return m.tool === call.name && Object.keys(m.args || {}).every((k) => args[k] === m.args[k]);
+		});
+	};
+
+	const hasMilestone = (item) => history.callsOf(item).some(isMilestone);
+
+	/**
+	 * When the latest turn marked a task finished: a note naming the work since the previous milestone (or the start of
+	 * the request), through this turn, to collapse it now. Each milestone is named once.
+	 */
+	const milestoneFor = (items, perChar) => {
+		if (!(cfg.milestones || []).length) {
+			return undefined;
+		}
+		const last = items.map((i) => history.callsOf(i).length > 0).lastIndexOf(true);
+		if (last < 0 || !hasMilestone(items[last])) {
+			return undefined;
+		}
+		const request = latestRequest(items);
+		let start = Math.max(0, request === items.length ? 0 : request);
+		for (let k = last - 1; k > start; k--) {
+			if (hasMilestone(items[k])) {
+				start = k;
+				break;
+			}
+		}
+		// The previous milestone's own results belong to it.
+		const before = new Set(history.callsOf(items[start]).map((c) => c.id));
+		while (start + 1 < items.length && items[start + 1].role === "toolResult" && before.has(items[start + 1].callId)) {
+			start += 1;
+		}
+		const span = items.slice(start + 1).filter((i) => i.role !== "note");
+		const results = span.filter((i) => i.role === "toolResult");
+		if (!results.length) {
+			return undefined;
+		}
+		const from = results[0].id;
+		const named = items.some((i) => i.role === "note" && i.note && i.note.kind === "milestone" && (i.note.tasks || []).includes(from));
+		const tokens = history.sumTokens(span, perChar);
+		if (named || tokens < cfg.milestoneMinTokens) {
+			return undefined;
+		}
+		const to = results[results.length - 1].id;
+		return { kind: "milestone", level: 0, tasks: [from], text: notes.milestoneText({ from, to, tokens }, cfg) };
 	};
 
 	const latestRequest = (items) => {
@@ -87,21 +159,25 @@ const createCompactor = (options) => {
 				}
 			}
 			const out = { edits, notes: [] };
-			if (!view.usage || !view.usage.window) {
-				return out;
+			if (view.usage && view.usage.window) {
+				const tokens = history.sumTokens(items, perChar);
+				const percent = (tokens / view.usage.window) * 100;
+				const thresholds = [cfg.noteAt, cfg.nearAt].filter((t) => t > 0 && (!cfg.compactAt || t < cfg.compactAt));
+				const level = notes.decide(percent, notes.notedIn(items), thresholds, cfg.rearmMargin);
+				if (level) {
+					const picks = suggestions.suggestions(items, perChar, cfg);
+					const near = level >= cfg.nearAt;
+					out.notes.push({
+						kind: near ? "near" : "note",
+						level,
+						text: near ? notes.nearText(tokens, view.usage.window, picks, cfg) : notes.noteText(tokens, view.usage.window, picks, cfg)
+					});
+					return out;
+				}
 			}
-			const tokens = history.sumTokens(items, perChar);
-			const percent = (tokens / view.usage.window) * 100;
-			const thresholds = [cfg.noteAt, cfg.nearAt].filter((t) => t > 0 && (!cfg.compactAt || t < cfg.compactAt));
-			const level = notes.decide(percent, notes.notedIn(items), thresholds, cfg.rearmMargin);
-			if (level) {
-				const picks = suggestions.suggestions(items, perChar, cfg);
-				const near = level >= cfg.nearAt;
-				out.notes.push({
-					kind: near ? "near" : "note",
-					level,
-					text: near ? notes.nearText(tokens, view.usage.window, picks, cfg) : notes.noteText(tokens, view.usage.window, picks, cfg)
-				});
+			const nudge = milestoneFor(items, perChar) || nudgeFor(items, perChar);
+			if (nudge) {
+				out.notes.push(nudge);
 			}
 			return out;
 		},
@@ -115,29 +191,18 @@ const createCompactor = (options) => {
 			const perChar = perCharOf(view);
 			const tasks = suggestions.earlierTasks(view.items, perChar, view.items.length);
 			const total = tasks.reduce((n, t) => n + t.tokens, 0);
-			if (!tasks.length || total < (view.usage.window * cfg.boundaryAt) / 100) {
+			let threshold = (view.usage.window * cfg.boundaryAt) / 100;
+			if (cfg.boundaryTokens) {
+				threshold = Math.min(threshold, cfg.boundaryTokens);
+			}
+			if (!tasks.length || total < threshold) {
 				return undefined;
 			}
-			state.named = tasks.map((t) => t.from);
+			if (cfg.autoCollapse) {
+				state.named = tasks.map((t) => t.from);
+			}
 			const tokens = history.sumTokens(view.items, perChar);
-			return { kind: "boundary", level: 0, tasks: state.named.slice(), text: notes.boundaryText(tokens, view.usage.window, tasks, cfg) };
-		},
-
-		/**
-		 * Write the summary of a compaction with the model, and index what it replaces.
-		 * @param {{items: object[], compacted?: object[], previousSummary?: string, instructions?: string, signal?: AbortSignal, usage?: object}} job
-		 *   `items`: what to summarise; `compacted`: the originals it replaces (for the index; default `items`)
-		 * @param {(prompt: string, o: {maxTokens: number, signal?: AbortSignal}) => Promise<{text: string, usage?: object}>} complete
-		 */
-		compact: (job, complete) => {
-			const prompt = compaction.request(job.items, job, cfg);
-			const perChar = history.tokensPerChar(job.items, job.usage, cfg);
-			return complete(prompt, { maxTokens: cfg.summaryMaxTokens, signal: job.signal }).then((r) => {
-				if (!r || !String(r.text || "").trim()) {
-					return undefined;
-				}
-				return { summary: compaction.finish(r.text, job.compacted || job.items, perChar, cfg), usage: r.usage };
-			});
+			return { kind: "boundary", level: 0, tasks: tasks.map((t) => t.from), text: notes.boundaryText(tokens, view.usage.window, tasks, cfg) };
 		}
 	};
 	return compactor;
