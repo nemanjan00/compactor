@@ -17,10 +17,12 @@ const DEFAULTS = {
 	rearmMargin: 15,
 	// A tool result longer than this (characters) is replaced at once by its head and tail (0 = off).
 	resultMaxChars: 20000,
+	// Tools whose results are never offloaded as they arrive (the compactor's own tools never are).
+	keepWhole: [],
 	pointerHead: 2000,
 	pointerTail: 1000,
-	// The longest piece `restore` reads at once (characters).
-	pieceMax: 20000,
+	// The longest piece `restore` reads at once (characters); kept under `resultMaxChars` so a piece is never offloaded.
+	pieceMax: 16000,
 	// Lines an index of a collapsed stretch lists at most.
 	indexMax: 40,
 	searchLimit: 10,

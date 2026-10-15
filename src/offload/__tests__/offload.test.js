@@ -24,10 +24,22 @@ describe("offload, restore and search", () => {
 		expect(piece.text.split("\n")[0]).toBe("[entry " + items[2].id + ", characters 4900–5000 of 5,000]");
 	});
 
-	test("results with images stay whole", () => {
+	test("results with images, of tools kept whole, and of the compactor's own tools stay whole", () => {
 		const items = f.reads(["shot.png"], 5000);
 		items[1].images = 1;
 		expect(offload.oversized(items, cfg)).toEqual([]);
+		const read = f.reads(["a.js"], 5000);
+		expect(offload.oversized(read, config({ resultMaxChars: 1000, keepWhole: ["read"] }))).toEqual([]);
+		read[1].toolName = "context_restore";
+		expect(offload.oversized(read, cfg)).toEqual([]);
+	});
+
+	test("a restored piece always fits under the offload limit", () => {
+		const items = [f.user("go")].concat(f.reads(["a.js"], 30000));
+		const piece = restore.restore(items, items, { entry: items[2].id, offset: 0, length: 50000 }, config());
+		expect(piece.text.length).toBeLessThanOrEqual(config().resultMaxChars);
+		const small = restore.restore(items, items, { entry: items[2].id, offset: 0, length: 50000 }, config({ resultMaxChars: 5000 }));
+		expect(small.text.length).toBeLessThanOrEqual(5000);
 	});
 
 	test("the model offloads a result by its call id, and restore puts it back", () => {

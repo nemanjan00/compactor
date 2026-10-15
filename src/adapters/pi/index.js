@@ -23,6 +23,14 @@ const schema = (params) => {
 	return Type.Object(props);
 };
 
+/**
+ * Pi's defaults on top of the core's: a `read` is a file the model asked for, and pi's read tool already caps its
+ * output and takes an offset and a limit, so its results are never offloaded as they arrive.
+ */
+const PI_DEFAULTS = {
+	keepWhole: ["read"]
+};
+
 /** Overrides of the defaults from the `COMPACTOR_OPTIONS` environment variable (JSON), e.g. `{"noteAt": 60}`. */
 const envOptions = () => {
 	const raw = process.env.COMPACTOR_OPTIONS;
@@ -37,7 +45,7 @@ const envOptions = () => {
  * @param {object} [options] overrides of the compactor's defaults (default: `COMPACTOR_OPTIONS`)
  */
 const extension = (pi, options) => {
-	const compactor = createCompactor(options || envOptions());
+	const compactor = createCompactor(Object.assign({}, PI_DEFAULTS, options || envOptions()));
 
 	compactor.tools.forEach((spec) => {
 		pi.registerTool({

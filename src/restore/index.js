@@ -22,7 +22,11 @@ const restore = (items, all, args, cfg) => {
 	const body = history.searchText(original);
 	if (args.offset !== undefined || args.length !== undefined) {
 		const offset = Math.max(0, Math.floor(Number(args.offset) || 0));
-		const length = Math.min(cfg.pieceMax, Math.max(1, Math.floor(Number(args.length) || cfg.pieceMax)));
+		let max = cfg.pieceMax;
+		if (cfg.resultMaxChars) {
+			max = Math.min(max, cfg.resultMaxChars - 200);
+		}
+		const length = Math.min(max, Math.max(1, Math.floor(Number(args.length) || max)));
 		const piece = body.slice(offset, offset + length);
 		const end = offset + piece.length;
 		let rest = "";

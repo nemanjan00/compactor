@@ -87,7 +87,9 @@ Keywords: warehouse, stock, fruit, supplier, vendor code
 …
 ```
 
-A tool result over 20,000 characters is replaced at once by its head and tail, with how to read the rest.
+A tool result over 20,000 characters is replaced at once by its head and tail, with how to read the rest. In pi,
+`read` results are left whole: pi's read tool already caps its output and takes an offset and a limit, and a file
+the model asked for is one it needs. The compactor's own results are never offloaded.
 
 When a new request starts and finished earlier requests take more than 30% of the window, a note suggests
 collapsing them. If the model goes on without doing so, they are collapsed after its next turn: each request and
@@ -140,7 +142,8 @@ COMPACTOR_OPTIONS='{"noteAt": 60, "boundaryAt": 25}' pi
 | `rearmMargin` | `15` | Points the context must fall below a noted threshold before it is noted again |
 | `resultMaxChars` | `20000` | Tool results longer than this are offloaded as they arrive (`0` = off) |
 | `pointerHead`, `pointerTail` | `2000`, `1000` | Characters of an oversized result kept from its start and end |
-| `pieceMax` | `20000` | The most `context_restore` reads at once |
+| `keepWhole` | `[]` (pi: `["read"]`) | Tools whose results are never offloaded as they arrive |
+| `pieceMax` | `16000` | The most `context_restore` reads at once (always under `resultMaxChars`) |
 | `indexMax` | `40` | Lines an index lists at most |
 | `searchLimit` | `10` | Hits `context_search` returns by default |
 | `suggestionsMax`, `suggestionMinTokens` | `3`, `500` | How many parts a note names, and the smallest worth naming |

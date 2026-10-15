@@ -17,13 +17,17 @@ const oversizedText = (item, cfg) => {
 		text.headAndTail(item.text, cfg.pointerHead, cfg.pointerTail);
 };
 
-/** Edits replacing new tool results longer than `cfg.resultMaxChars` with their head and tail. Results with images stay. */
+/**
+ * Edits replacing new tool results longer than `cfg.resultMaxChars` with their head and tail. Results with images,
+ * results of the tools in `cfg.keepWhole`, and the compactor's own results (a restored piece, search hits) stay.
+ */
 const oversized = (results, cfg) => {
 	if (!cfg.resultMaxChars) {
 		return [];
 	}
+	const whole = new Set((cfg.keepWhole || []).concat(Object.keys(cfg.tools).map((k) => cfg.tools[k])));
 	return results
-		.filter((r) => r.role === "toolResult" && !r.images && (r.text || "").length > cfg.resultMaxChars)
+		.filter((r) => r.role === "toolResult" && !r.images && !whole.has(r.toolName) && (r.text || "").length > cfg.resultMaxChars)
 		.map((r) => ({ target: r.id, text: oversizedText(r, cfg) }));
 };
 

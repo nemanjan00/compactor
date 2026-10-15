@@ -82,15 +82,17 @@ describe("pi adapter", () => {
 		expect(again[3].content[0].text).toBe("[entry r2] parse dates at line 12");
 	});
 
-	test("a big new result becomes a context_edit at the end of its turn", () => {
+	test("a big new result becomes a context_edit at the end of its turn, but a read stays whole", () => {
 		const pi = fakePi();
 		extension(pi, {});
 		const list = entries();
+		expect(pi.handlers.turn_end({ toolResultEntryIds: ["r1", "r2"] }, ctxOf(list))).toBeUndefined();
+		list[2].message.toolName = "bash";
 		const out = pi.handlers.turn_end({ toolResultEntryIds: ["r1", "r2"] }, ctxOf(list));
 		expect(out.entries).toHaveLength(1);
 		expect(out.entries[0].type).toBe("context_edit");
 		expect(out.entries[0].targetId).toBe("r1");
-		expect(out.entries[0].replacement.content[0].text).toMatch(/^\[offloaded: read returned 30,000 characters/);
+		expect(out.entries[0].replacement.content[0].text).toMatch(/^\[offloaded: bash returned 30,000 characters/);
 	});
 
 	test("a rewind keeps the first call block and puts the summary in its result", () => {
@@ -98,6 +100,7 @@ describe("pi adapter", () => {
 		extension(pi, {});
 		const list = entries();
 		const rewind = pi.tools.find((t) => t.name === "context_rewind");
+		list[2].message.content[0].text = "x".repeat(3000);
 		return rewind.execute("call_x", { from: "r1", to: "r2", summary: "line 12 parses dates\nKeywords: parser, dates" }, undefined, undefined, ctxOf(list)).then((r) => {
 			expect(r.content[0].text).toMatch(/^Collapsed 3 entries/);
 			const out = pi.handlers.turn_end({ toolResultEntryIds: [] }, ctxOf(list));
