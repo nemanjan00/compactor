@@ -142,7 +142,11 @@ const rewind = (items, args, perChar, cfg) => {
  * them is still there. `tasks` are the finished earlier requests (`suggestions.earlierTasks`).
  */
 const boundaryCollapse = (items, tasks, named, perChar, cfg) => {
-	const ignored = tasks.filter((t) => named.includes(t.from));
+	// A request the model collapsed itself is left alone.
+	const ignored = tasks.filter((t) => {
+		const first = items.find((i) => i.id === t.from);
+		return named.includes(t.from) && first && !isSummary(first);
+	});
 	if (!ignored.length) {
 		return undefined;
 	}
