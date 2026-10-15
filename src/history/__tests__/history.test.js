@@ -20,6 +20,8 @@ describe("history", () => {
 		const chars = history.itemChars(items[0]);
 		expect(history.tokensPerChar(items, { tokens: chars / 2, window: 1000 }, config())).toBeCloseTo(0.5);
 		expect(history.tokensPerChar(items, undefined, config())).toBeCloseTo(1 / 3.5);
+		// A system prompt as long as the messages halves the ratio.
+		expect(history.tokensPerChar(items, { tokens: chars / 2, window: 1000, baseChars: chars }, config())).toBeCloseTo(0.25);
 	});
 
 	test("applyEdits drops, replaces, keeps calls and restores, the last edit of a target winning", () => {

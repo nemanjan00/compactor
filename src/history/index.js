@@ -39,15 +39,16 @@ const itemChars = (item) => {
 
 /**
  * Tokens per character: `usage.tokens` (the context size the host measured or estimated) over the characters of
- * `items`, else the configured default.
+ * `items` and of what else the request carries (`usage.baseChars`: the system prompt, tool definitions), else the
+ * configured default.
  * @param {object[]} items
- * @param {{tokens: number, window: number}|undefined} usage
+ * @param {{tokens: number, window: number, baseChars?: number}|undefined} usage
  * @param {{charsPerToken: number}} cfg
  */
 const tokensPerChar = (items, usage, cfg) => {
 	const chars = items.reduce((n, i) => {
 		return n + itemChars(i);
-	}, 0);
+	}, (usage && usage.baseChars) || 0);
 	if (usage && usage.tokens > 0 && chars > 0) {
 		return usage.tokens / chars;
 	}

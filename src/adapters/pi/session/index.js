@@ -100,6 +100,14 @@ const allItems = (entries, branch) => {
 	}).filter(Boolean);
 };
 
+/** Characters of the request beyond the messages: the system prompt (tool definitions are part of it in pi). */
+const baseChars = (ctx) => {
+	if (!ctx.getSystemPrompt) {
+		return 0;
+	}
+	return String(ctx.getSystemPrompt() || "").length;
+};
+
 /**
  * The core's view of a pi session: `{ items, all, usage }`.
  * @param {object} ctx pi's ExtensionContext
@@ -111,7 +119,7 @@ const view = (ctx, projected) => {
 	const usage = ctx.getContextUsage ? ctx.getContextUsage() : undefined;
 	let measured;
 	if (usage && usage.contextWindow) {
-		measured = { tokens: usage.tokens || 0, window: usage.contextWindow };
+		measured = { tokens: usage.tokens || 0, window: usage.contextWindow, baseChars: baseChars(ctx) };
 	}
 	return { items: projectedItems(entries), all: allItems(sm.getEntries(), sm.getBranch()), usage: measured };
 };
