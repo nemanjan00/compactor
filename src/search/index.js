@@ -50,6 +50,9 @@ const search = (all, args, cfg) => {
 		if (x.item.role === "toolResult") {
 			what = x.item.toolName + " result";
 		}
+		if (x.item.offBranch) {
+			what += ", on another branch";
+		}
 		const offset = Math.max(0, x.at - 200);
 		return "- entry " + x.item.id + " (" + what + "): " + snippet(x.body, x.at, cfg) + "\n  read: " + cfg.tools.restore +
 			" { entry: \"" + x.item.id + "\", offset: " + offset + ", length: 2000 }";
