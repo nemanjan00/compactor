@@ -89,7 +89,10 @@ const taskPrompt = (t) => {
 /** Whether an answer names dock `n`: "dock 12", "bay 12", "dock number 12", "Dock **12**". */
 const namesDock = (answer, n) => new RegExp("\\b(dock|bay)\\b[^.\\n]{0,24}?\\b" + n + "\\b", "i").test(answer.replace(/\*/g, ""));
 
-/** Questions about earlier batches, after all tasks: one in the logs' own words, one in other words. */
+/**
+ * Questions about earlier batches, after all tasks: one in the logs' own words, one in other words, and one about a
+ * detail no summary keeps (one pallet's weight), which needs the original back or the file read again.
+ */
 const followUps = (tasks) => {
 	const first = tasks[0].fact;
 	const second = tasks[Math.min(1, tasks.length - 1)].fact;
@@ -103,6 +106,12 @@ const followUps = (tasks) => {
 			kind: "other words",
 			prompt: "In the second batch you looked at, a container got stopped for the customs people. At which loading bay was it stopped?",
 			check: (a) => namesDock(a, second.dock)
+		},
+		{
+			kind: "detail",
+			// Pallet P352 is row 50 of log 2 (P = row * 7 + log): weight 200 + (row * 37 + batch) % 500.
+			prompt: "One more detail from batch 0, log 2 (shipments/b0-f2.log): what weight was recorded for pallet P352?",
+			check: (a) => /\b550\s*kg\b/i.test(a) || /\b550\b/.test(a)
 		}
 	];
 };
@@ -258,6 +267,9 @@ const limited = (jobs, n) => {
 	return Promise.all(Array.from({ length: Math.min(n, jobs.length) }, worker)).then(() => results);
 };
 
+const FOLLOW_UPS = ["by words", "other words", "detail"];
+const ALL = ["task"].concat(FOLLOW_UPS);
+
 const median = (xs) => {
 	const s = xs.slice().sort((a, b) => a - b);
 	return s[Math.floor((s.length - 1) / 2)];
@@ -270,18 +282,17 @@ const table = (results, arms) => {
 	const rows = arms.map((arm) => {
 		const rs = results.filter((r) => r.arm === arm);
 		const sum = (r, kinds) => r.phases.filter((p) => kinds.includes(p.kind)).reduce((n, p) => n + p.billed, 0);
-		const total = rs.map((r) => sum(r, ["task", "by words", "other words"]));
+		const total = rs.map((r) => sum(r, ALL));
 		const tasks = rs.map((r) => sum(r, ["task"]));
-		const fu = rs.map((r) => sum(r, ["by words", "other words"]));
+		const fu = rs.map((r) => sum(r, FOLLOW_UPS));
 		const right = (kinds) => rs.reduce((n, r) => n + r.answers.filter((a) => kinds.includes(a.kind) && a.right).length, 0) + "/" +
 			rs.reduce((n, r) => n + r.answers.filter((a) => kinds.includes(a.kind)).length, 0);
 		const count = (field, kinds) => median(rs.map((r) => r.phases.filter((p) => kinds.includes(p.kind)).reduce((n, p) => n + p[field], 0)));
 		const range = (xs) => k(median(xs)) + " (" + k(Math.min.apply(null, xs)) + "–" + k(Math.max.apply(null, xs)) + ")";
 		const cache = rs.reduce((n, r) => n + r.phases.reduce((m, p) => m + p.usage.cacheRead, 0), 0) /
 			Math.max(1, rs.reduce((n, r) => n + r.phases.reduce((m, p) => m + p.usage.cacheRead + p.usage.input + p.usage.cacheWrite, 0), 0));
-		return "| " + arm + " | " + range(total) + " | " + range(tasks) + " | " + right(["task"]) + " | " + range(fu) + " | " + right(["by words", "other words"]) +
-			" | " + count("reads", ["by words", "other words"]) + " | " + count("compactions", ["task", "by words", "other words"]) + " | " +
-			count("edits", ["task", "by words", "other words"]) + " | " + Math.round(cache * 100) + "% | " +
+		return "| " + arm + " | " + range(total) + " | " + range(tasks) + " | " + right(["task"]) + " | " + range(fu) + " | " + right(FOLLOW_UPS) +
+			" | " + count("reads", FOLLOW_UPS) + " | " + count("compactions", ALL) + " | " + count("edits", ALL) + " | " + Math.round(cache * 100) + "% | " +
 			k(median(rs.map((r) => Math.max.apply(null, r.phases.map((p) => p.maxContext))))) + " |";
 	});
 	return ["| arm | billed-equivalent | tasks | tasks right | follow-ups | follow-ups right | follow-up re-reads | compactions | context edits | cached | peak context |",
