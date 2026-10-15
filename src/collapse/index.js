@@ -193,6 +193,7 @@ const boundaryCollapse = (items, tasks, named, perChar, cfg) => {
 
 module.exports = {
 	COLLAPSED,
+	isSummary,
 	index,
 	rewind,
 	boundaryCollapse

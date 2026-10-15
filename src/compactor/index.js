@@ -42,21 +42,27 @@ const createCompactor = (options) => {
 
 	/**
 	 * A short note naming finished stretches of at least `cfg.nudgeTokens`, whatever the window: so the model collapses
-	 * finished work early. Each stretch is named once (by where it starts).
+	 * finished work early. A stretch is named again only after it grew by another `cfg.nudgeTokens`.
 	 */
 	const nudgeFor = (items, perChar) => {
 		if (!cfg.nudgeTokens) {
 			return undefined;
 		}
-		const nudged = new Set(items
+		// The size each stretch (by where it starts) had when it was last named.
+		const nudged = items
 			.filter((i) => i.role === "note" && i.note && i.note.kind === "nudge")
-			.reduce((ids, i) => ids.concat(i.note.tasks || []), []));
+			.reduce((m, i) => {
+				(i.note.tasks || []).forEach((from, k) => {
+					m.set(from, ((i.note.sizes || [])[k]) || Infinity);
+				});
+				return m;
+			}, new Map());
 		const picks = suggestions.suggestions(items, perChar, Object.assign({}, cfg, { suggestionMinTokens: cfg.nudgeTokens }))
-			.filter((x) => x.kind === "collapse" && !nudged.has(x.from));
+			.filter((x) => x.kind === "collapse" && (!nudged.has(x.from) || x.tokens >= nudged.get(x.from) + cfg.nudgeTokens));
 		if (!picks.length) {
 			return undefined;
 		}
-		return { kind: "nudge", level: 0, tasks: picks.map((x) => x.from), text: notes.nudgeText(picks, cfg) };
+		return { kind: "nudge", level: 0, tasks: picks.map((x) => x.from), sizes: picks.map((x) => x.tokens), text: notes.nudgeText(picks, cfg) };
 	};
 
 	/** Whether a tool call marks a finished task (`cfg.milestones`). */

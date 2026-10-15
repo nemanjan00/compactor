@@ -122,7 +122,7 @@ describe("pi adapter", () => {
 
 	test("a note is a hidden custom message the next session load reads back as a note", () => {
 		const m = session.noteMessage({ kind: "note", level: 70, text: "[context: …]" });
-		expect(m).toEqual({ customType: "compactor", content: "[context: …]", display: false, details: { kind: "note", level: 70, tasks: [] } });
+		expect(m).toEqual({ customType: "compactor", content: "[context: …]", display: false, details: { kind: "note", level: 70, tasks: [], sizes: [] } });
 		const item = session.entryItem(Object.assign({ type: "custom_message", id: "n1" }, m));
 		expect(item.role).toBe("note");
 		expect(item.note.level).toBe(70);

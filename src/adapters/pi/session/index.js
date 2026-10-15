@@ -160,7 +160,7 @@ const noteMessage = (note) => {
 		customType: NOTE_TYPE,
 		content: note.text,
 		display: false,
-		details: { kind: note.kind, level: note.level || 0, tasks: note.tasks || [] }
+		details: { kind: note.kind, level: note.level || 0, tasks: note.tasks || [], sizes: note.sizes || [] }
 	};
 };
 

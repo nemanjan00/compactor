@@ -86,6 +86,25 @@ describe("createCompactor", () => {
 		expect(createCompactor({ nudgeTokens: 0 }).endTurn(viewOf(items, items, 1000000), []).notes).toEqual([]);
 	});
 
+	test("work after a collapse is a stretch of its own, and a nudged stretch is named again after it grew", () => {
+		const c = createCompactor({ nudgeTokens: 2000 });
+		const before = f.reads(["a.js", "b.js"], 6000);
+		const items = [f.user("go")].concat(before, f.reads(["x.js"], 100));
+		const r = c.callTool("context_rewind", { from: before[1].id, to: before[2].id, summary: "read a and b" }, viewOf(items, items, 1000000));
+		expect(r.isError).toBe(false);
+		const collapsed = history.applyEdits(items, c.endTurn(viewOf(items, items, 1000000), []).edits, items);
+		const after = f.reads(["c.js", "d.js"], 6000);
+		const later = collapsed.concat(after, f.reads(["y.js"], 100));
+		const out = c.endTurn(viewOf(later, items.concat(after), 1000000), []);
+		// The first result after the collapse (x.js) starts the new stretch.
+		const first = items[items.length - 1].id;
+		expect(out.notes[0].tasks).toEqual([first]);
+		const noted = later.concat([{ id: "n1", role: "note", text: "", note: { kind: "nudge", tasks: out.notes[0].tasks, sizes: out.notes[0].sizes } }]);
+		expect(c.endTurn(viewOf(noted, noted, 1000000), []).notes).toEqual([]);
+		const grown = noted.concat(f.reads(["e.js", "f.js"], 6000), f.reads(["z.js"], 100));
+		expect(c.endTurn(viewOf(grown, grown, 1000000), []).notes[0].tasks).toEqual([first]);
+	});
+
 	test("a todo marked completed names the work since the previous one, once", () => {
 		const todo = (status) => {
 			const turn = { id: "t" + status + Math.random(), role: "assistant", text: "", calls: [{ id: "call_" + status + Math.random(), name: "todo", args: JSON.stringify({ action: "update", id: 1, status }) }] };

@@ -1,4 +1,5 @@
 const history = require("../history");
+const collapse = require("../collapse");
 const text = require("../utils/text");
 
 /**
@@ -55,8 +56,16 @@ const suggestions = (items, perChar, cfg) => {
 		}
 		cur = null;
 	};
+	// A collapse keeps its first call and puts the summary in that call's result: the turn and the summary end a stretch,
+	// so what comes after a collapse is named on its own.
+	const summaries = new Set(items.filter((i) => i.role === "toolResult" && collapse.isSummary(i)).map((i) => i.callId));
 	items.slice(1, end).forEach((item) => {
 		const calls = history.callsOf(item);
+		const collapsed = (item.role === "toolResult" && summaries.has(item.callId)) || calls.some((c) => summaries.has(c.id));
+		if (collapsed) {
+			close();
+			return;
+		}
 		if (calls.length) {
 			if (!calls.every((c) => done.has(c.id))) {
 				close();
