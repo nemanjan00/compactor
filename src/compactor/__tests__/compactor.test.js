@@ -51,7 +51,7 @@ describe("createCompactor", () => {
 	});
 
 	test("a new request after big finished ones gets a note, and with autoCollapse they are collapsed after the next turn if left", () => {
-		const c = createCompactor({ autoCollapse: true });
+		const c = createCompactor({ autoCollapse: true, taskMinTokens: 0 });
 		const t1 = [f.user("summarise the logs")].concat(f.reads(["log1", "log2"], 8000), [f.reply("two errors: E1 and E2")]);
 		const before = viewOf(t1, t1, 10000);
 		const note = c.startRequest(before);
@@ -67,7 +67,7 @@ describe("createCompactor", () => {
 	});
 
 	test("contextWindow caps the window the notes measure against", () => {
-		const c = createCompactor({ contextWindow: 10000 });
+		const c = createCompactor({ contextWindow: 10000, taskMinTokens: 0 });
 		const t1 = [f.user("summarise the logs")].concat(f.reads(["log1", "log2"], 8000), [f.reply("two errors")]);
 		expect(c.startRequest(viewOf(t1, t1, 1000000)).text).toContain("of 10k tokens");
 	});
@@ -135,17 +135,27 @@ describe("createCompactor", () => {
 
 	test("the boundary note fires at boundaryTokens in a big window", () => {
 		const t1 = [f.user("summarise the logs")].concat(f.reads(["log1", "log2"], 8000), [f.reply("two errors")]);
-		expect(createCompactor({ boundaryTokens: 0 }).startRequest(viewOf(t1, t1, 1000000))).toBeUndefined();
-		expect(createCompactor({ boundaryTokens: 3000 }).startRequest(viewOf(t1, t1, 1000000)).kind).toBe("boundary");
+		expect(createCompactor({ boundaryTokens: 0, taskMinTokens: 0 }).startRequest(viewOf(t1, t1, 1000000))).toBeUndefined();
+		expect(createCompactor({ boundaryTokens: 3000, taskMinTokens: 0 }).startRequest(viewOf(t1, t1, 1000000)).kind).toBe("boundary");
 	});
 
 	test("by default the boundary note only suggests: nothing is collapsed for the model", () => {
-		const c = createCompactor();
+		const c = createCompactor({ taskMinTokens: 0 });
 		const t1 = [f.user("summarise the logs")].concat(f.reads(["log1", "log2"], 8000), [f.reply("two errors: E1 and E2")]);
 		const note = c.startRequest(viewOf(t1, t1, 10000));
 		expect(note.text).not.toContain("Left as they are");
 		const now = t1.concat([f.user("now fix E1"), { id: "n1", role: "note", text: note.text, note: { kind: "boundary" } }], f.reads(["src.js"], 500));
 		expect(c.endTurn(viewOf(now, now, 10000), []).edits).toEqual([]);
+	});
+
+	test("the boundary note names only earlier requests worth a turn", () => {
+		const c = createCompactor({ boundaryTokens: 3000, taskMinTokens: 1500 });
+		const big = [f.user("summarise the logs")].concat(f.reads(["log1", "log2"], 8000), [f.reply("two errors")]);
+		const small = [f.user("lunch anyone?"), f.reply("sure")];
+		const items = big.concat(small);
+		const note = c.startRequest(viewOf(items, items, 1000000));
+		expect(note.tasks).toEqual([big[0].id]);
+		expect(note.text).not.toContain("lunch anyone");
 	});
 
 	test("no boundary note for small earlier requests", () => {

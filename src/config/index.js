@@ -18,6 +18,8 @@ const DEFAULTS = {
 	autoCollapse: false,
 	// … or this many tokens, if fewer (0 = only the share), so a big window doesn't put it off.
 	boundaryTokens: 40000,
+	// The least a finished earlier request must take (tokens) to be named in the note at a new request.
+	taskMinTokens: 4000,
 	// A finished stretch of tool calls this big (tokens) gets a short note suggesting to collapse it, whatever the
 	// window (0 = off).
 	nudgeTokens: 25000,

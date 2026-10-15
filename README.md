@@ -164,6 +164,7 @@ COMPACTOR_OPTIONS='{"noteAt": 60, "boundaryAt": 25}' pi
 | `compactAt` | `null` | Where the host compacts on its own, mentioned in the notes; thresholds at or above it are skipped |
 | `boundaryAt` | `30` | Share of the window that finished earlier requests must take for a note at a new request (`0` = off) |
 | `boundaryTokens` | `40000` | … or this many tokens, if fewer, so a big window doesn't put the note off (`0` = only the share) |
+| `taskMinTokens` | `4000` | The least an earlier request must take to be named in the note at a new request |
 | `nudgeTokens` | `25000` | A finished stretch this big gets a note suggesting to collapse it, whatever the window (`0` = off) |
 | `milestones` | `[]` (pi: a completed `todo`) | Tool calls that mark a task done, `{ tool, args }`: the task's work gets a note suggesting to collapse it |
 | `milestoneMinTokens` | `4000` | The least work a milestone note names |

@@ -196,8 +196,10 @@ const createCompactor = (options) => {
 				return undefined;
 			}
 			const perChar = perCharOf(view);
-			const tasks = suggestions.earlierTasks(view.items, perChar, view.items.length);
-			const total = tasks.reduce((n, t) => n + t.tokens, 0);
+			const finished = suggestions.earlierTasks(view.items, perChar, view.items.length);
+			const total = finished.reduce((n, t) => n + t.tokens, 0);
+			// Only requests worth a turn of their own are named: collapsing a small one saves less than the turn costs.
+			const tasks = finished.filter((t) => t.tokens >= cfg.taskMinTokens);
 			let threshold = (view.usage.window * cfg.boundaryAt) / 100;
 			if (cfg.boundaryTokens) {
 				threshold = Math.min(threshold, cfg.boundaryTokens);
