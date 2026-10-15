@@ -262,25 +262,35 @@ each) to find a held crate. Then come three questions about earlier batches:
 Both arms manage an effective 64k-token window (pi compacts there). The `classic` arm is pi alone; the `compactor`
 arm is pi with this extension. Billed-equivalent tokens count uncached input at 1, cache reads at 0.1 and output at 5.
 
-Results from 2026-10-15 with kimi-for-coding and compactor 0.1.1 (before the nudges), three runs per arm (median, range in brackets):
+Results from 2026-10-15 with kimi-for-coding and compactor 0.1.3 (with the nudges), three runs per arm
+(median, range in brackets):
 
 | arm | billed-equivalent | tasks | follow-ups | right | compactions | peak context | cached |
 |-----|-------------------|-------|------------|-------|-------------|--------------|--------|
-| pi alone | 195k (186k–309k) | 177k (166k–279k) | 21k (18k–30k) | 24/24 | 2 | 48k | 79% |
-| pi + compactor | 169k (163k–171k) | 158k (147k–158k) | 13k (11k–16k) | 24/24 | 0 | 28k | 63% |
+| pi alone | 312k (183k–314k) | 283k (168k–292k) | 22k (15k–29k) | 24/24 | 2 | 62k | 84% |
+| pi + compactor | 187k (163k–193k) | 173k (152k–182k) | 11k (11k–14k) | 24/24 | 0 | 28k | 73% |
 
-- **Tasks cost the same each time.** With the compactor, each task after the first cost about 30k. At each new
-  request the model collapsed the previous batch itself, prompted by the boundary note. In the classic arm the
-  context grew until pi compacted, and those tasks cost 38–80k.
-- **The detail question cost less.** The classic arm read the log again (12–22k). The compactor arm found the
-  line in a much smaller context, with grep and sometimes `context_restore` (3–8k).
+How a run reads its files decides most of its cost. Here is each arm split by that:
+
+| reads | pi alone | pi + compactor |
+|-------|----------|----------------|
+| five at once per batch | 183k (1 run) | 163k (1 run): 11% less |
+| one per turn | 312k, 314k (2 runs) | 187k, 193k (2 runs): about 39% less |
+
+- **The model collapses on its own.** Every compactor run collapsed each finished batch with its own summary,
+  prompted by the guideline, by a note, or by nothing at all. It never compacted. Each task after the first cost
+  30–40k, while the classic arm grew until pi compacted (up to 86k for that task).
+- **The detail question:** the classic arm read the log again (8–20k). The compactor arm searched its history
+  (`context_search`, then `context_restore` for the line) for 3–8k.
 - **Caveats:**
-  - The 309k classic run read its files one per turn rather than all at once. Another model, or another phrasing,
-    changes how many calls a task takes.
-  - Each batch has one fact, so pi's compaction summaries kept it, and both arms answered the first two questions
-    from memory.
-  - The logs stay on disk, so reading them again is cheap here. Where the source is gone or costly, restore
-    matters more.
+  - The batches hold one fact each, so pi's compaction summaries kept them, and both arms answered the first two
+    questions from memory.
+  - The logs stay on disk, so reading them again is cheap here; where the source is gone or costly, restore matters
+    more.
+  - The model chose between parallel and one-per-turn reads on its own; three runs per arm is a small sample.
+
+An earlier round with 0.1.1 (before the nudges) gave 169k against 195k, with every run but one reading in
+parallel.
 
 Caching: between calls the extension doesn't change anything, so the prefix stays cached (entry labels are added
 the same way before every call). A collapse or an offload invalidates the cache from the first changed entry on;
