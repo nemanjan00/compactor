@@ -81,8 +81,8 @@ const createCompactor = (options) => {
 	const hasMilestone = (item) => history.callsOf(item).some(isMilestone);
 
 	/**
-	 * When the latest turn marked a task finished: a note naming the work since the previous milestone (or the start of
-	 * the request), through this turn, to collapse it now. Each milestone is named once.
+	 * When the latest turn marked a task finished: a note naming the work since the previous milestone or the latest
+	 * collapse, through this turn, to collapse it now. Each stretch is named once.
 	 */
 	const milestoneFor = (items, perChar) => {
 		if (!(cfg.milestones || []).length) {
@@ -92,10 +92,11 @@ const createCompactor = (options) => {
 		if (last < 0 || !hasMilestone(items[last])) {
 			return undefined;
 		}
-		const request = latestRequest(items);
-		let start = Math.max(0, request === items.length ? 0 : request);
-		for (let k = last - 1; k > start; k--) {
-			if (hasMilestone(items[k])) {
+		// The task's work starts after the previous milestone or the latest collapse, whichever is later; a task can
+		// span several requests.
+		let start = 0;
+		for (let k = last - 1; k > 0; k--) {
+			if (hasMilestone(items[k]) || collapse.isSummary(items[k])) {
 				start = k;
 				break;
 			}

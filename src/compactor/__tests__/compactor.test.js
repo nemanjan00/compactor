@@ -123,6 +123,11 @@ describe("createCompactor", () => {
 		const later = noted.concat(todo("in_progress"), second, todo("completed"));
 		const next = c.endTurn(viewOf(later, later, 1000000), []);
 		expect(next.notes[0].tasks).toEqual([later[noted.length + 1].id]);
+		// A task spanning requests: its work since the previous milestone counts, not only since the latest request.
+		const across = later.concat(f.reads(["g.js", "h.js"], 3000), [f.reply("done with g and h"), f.user("ok, mark it done")], todo("completed"));
+		const spanning = c.endTurn(viewOf(across, across, 1000000), []);
+		expect(spanning.notes[0].kind).toBe("milestone");
+		expect(spanning.notes[0].tasks).toEqual([across[later.length + 1].id]);
 		// An in-progress update is no milestone.
 		const busy = items.slice(0, items.length - 2).concat(todo("in_progress"));
 		expect(c.endTurn(viewOf(busy, busy, 1000000), []).notes).toEqual([]);
