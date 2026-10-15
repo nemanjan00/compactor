@@ -66,6 +66,12 @@ describe("createCompactor", () => {
 		expect(c.endTurn(viewOf(view, now, 10000), []).edits).toEqual([]);
 	});
 
+	test("contextWindow caps the window the notes measure against", () => {
+		const c = createCompactor({ contextWindow: 10000 });
+		const t1 = [f.user("summarise the logs")].concat(f.reads(["log1", "log2"], 8000), [f.reply("two errors")]);
+		expect(c.startRequest(viewOf(t1, t1, 1000000)).text).toContain("of 10k tokens");
+	});
+
 	test("no boundary note for small earlier requests", () => {
 		const c = createCompactor();
 		const t1 = [f.user("lunch anyone?"), f.reply("sure")];

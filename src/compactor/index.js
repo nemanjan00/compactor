@@ -27,6 +27,14 @@ const createCompactor = (options) => {
 	const specs = tools.specs(cfg);
 	const state = { pending: [], named: [] };
 
+	/** The view with its window capped at `cfg.contextWindow`. */
+	const capped = (view) => {
+		if (!cfg.contextWindow || !view.usage || !(view.usage.window > cfg.contextWindow)) {
+			return view;
+		}
+		return Object.assign({}, view, { usage: Object.assign({}, view.usage, { window: cfg.contextWindow }) });
+	};
+
 	const perCharOf = (view) => history.tokensPerChar(view.items, view.usage, cfg);
 
 	/** The view with the changes held for the end of the turn applied, so a later call this turn sees them. */
@@ -62,7 +70,8 @@ const createCompactor = (options) => {
 			return { text: r.text, isError: false };
 		},
 
-		endTurn: (view, newResultIds) => {
+		endTurn: (input, newResultIds) => {
+			const view = capped(input);
 			const perChar = perCharOf(view);
 			const fresh = view.items.filter((i) => (newResultIds || []).includes(i.id));
 			let edits = state.pending.concat(offload.oversized(fresh, cfg));
@@ -97,7 +106,8 @@ const createCompactor = (options) => {
 			return out;
 		},
 
-		startRequest: (view) => {
+		startRequest: (input) => {
+			const view = capped(input);
 			state.named = [];
 			if (!cfg.boundaryAt || !view.usage || !view.usage.window) {
 				return undefined;

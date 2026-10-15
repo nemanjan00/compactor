@@ -133,6 +133,7 @@ COMPACTOR_OPTIONS='{"noteAt": 60, "boundaryAt": 25}' pi
 |--------|---------|---------|
 | `noteAt` | `70` | Percent of the window at which the note about context size comes |
 | `nearAt` | `80` | Percent at which the note becomes an instruction to free space |
+| `contextWindow` | `null` | Manage against this window (tokens) when it is smaller than the model's |
 | `compactAt` | `null` | Where the host compacts on its own, mentioned in the notes; thresholds at or above it are skipped |
 | `boundaryAt` | `30` | Share of the window that finished earlier requests must take for a note at a new request (`0` = off) |
 | `rearmMargin` | `15` | Points the context must fall below a noted threshold before it is noted again |

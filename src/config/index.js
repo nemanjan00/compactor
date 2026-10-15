@@ -7,6 +7,8 @@ const DEFAULTS = {
 	noteAt: 70,
 	// An instruction to free space before going on (percent of the window).
 	nearAt: 80,
+	// The window to manage against, when smaller than the model's (tokens; null = the model's).
+	contextWindow: null,
 	// Where the host compacts on its own, mentioned in the notes (percent of the window; null = not mentioned).
 	compactAt: null,
 	// Finished earlier requests that take this share of the window get a note at a new request (0 = off).
