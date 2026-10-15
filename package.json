@@ -20,7 +20,10 @@
 	},
 	"files": [
 		"src",
-		"!src/**/__tests__"
+		"!src/**/__tests__",
+		"!src/utils/fixtures",
+		"README.md",
+		"LICENSE"
 	],
 	"scripts": {
 		"test": "jest",
@@ -60,5 +63,10 @@
 		"typebox": {
 			"optional": true
 		}
+	},
+	"author": "Nemanja Nedeljkovic",
+	"homepage": "https://github.com/nemanjan00/compactor#readme",
+	"bugs": {
+		"url": "https://github.com/nemanjan00/compactor/issues"
 	}
 }
