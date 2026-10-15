@@ -28,8 +28,9 @@
 	"scripts": {
 		"test": "jest",
 		"test:watch": "jest --watch",
-		"lint": "eslint src/",
-		"prepare": "husky"
+		"lint": "eslint src/ bench/",
+		"prepare": "husky",
+		"bench": "node bench/pi"
 	},
 	"jest": {
 		"testEnvironment": "node",
