@@ -30,6 +30,7 @@ and an adapter for another harness is a small module.
 - [Tools](#tools)
 - [Configuration](#configuration)
 - [How it fits a harness](#how-it-fits-a-harness)
+- [Benchmark in pi](#benchmark-in-pi)
 - [Where the design comes from](#where-the-design-comes-from)
 - [Development](#development)
 
@@ -217,6 +218,42 @@ sequenceDiagram
   H->>H: apply edits (originals kept)
   H->>M: next request, shorter
 ```
+
+## Benchmark in pi
+
+`yarn bench` runs one long pi session per run: five tasks, each reading five shipment logs (about 14k characters
+each) to find a held crate. Then come three questions about earlier batches:
+- one in the logs' own words;
+- one in other words ("container", "loading bay" for "crate", "dock");
+- one about a detail no summary keeps: one pallet's weight in one log.
+
+Both arms manage an effective 64k-token window (pi compacts there). The `classic` arm is pi alone; the `compactor`
+arm is pi with this extension. Billed-equivalent tokens count uncached input at 1, cache reads at 0.1 and output at 5.
+
+Results from 2026-10-15 with kimi-for-coding, three runs per arm (median, range in brackets):
+
+| arm | billed-equivalent | tasks | follow-ups | right | compactions | peak context | cached |
+|-----|-------------------|-------|------------|-------|-------------|--------------|--------|
+| pi alone | 195k (186k–309k) | 177k (166k–279k) | 21k (18k–30k) | 24/24 | 2 | 48k | 79% |
+| pi + compactor | 169k (163k–171k) | 158k (147k–158k) | 13k (11k–16k) | 24/24 | 0 | 28k | 63% |
+
+- **Tasks cost the same each time.** With the compactor, each task after the first cost about 30k. At each new
+  request the model collapsed the previous batch itself, prompted by the boundary note. In the classic arm the
+  context grew until pi compacted, and those tasks cost 38–80k.
+- **The detail question cost less.** The classic arm read the log again (12–22k). The compactor arm found the
+  line in a much smaller context, with grep and sometimes `context_restore` (3–8k).
+- **Caveats:**
+  - The 309k classic run read its files one per turn rather than all at once. Another model, or another phrasing,
+    changes how many calls a task takes.
+  - Each batch has one fact, so pi's compaction summaries kept it, and both arms answered the first two questions
+    from memory.
+  - The logs stay on disk, so reading them again is cheap here. Where the source is gone or costly, restore
+    matters more.
+
+Caching: between calls the extension doesn't change anything, so the prefix stays cached (entry labels are added
+the same way before every call). A collapse or an offload invalidates the cache from the first changed entry on;
+the rest is shorter, so the next call costs less even uncached. The cached share is lower with the compactor for
+that reason, and because new tool results make up more of a smaller context.
 
 ## Where the design comes from
 
